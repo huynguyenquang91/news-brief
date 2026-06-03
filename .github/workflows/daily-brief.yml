@@ -1,0 +1,49 @@
+name: Daily Football News Brief
+
+on:
+  schedule:
+    - cron: "0 23 * * *"   # 06:00 Vietnam (UTC+7)
+    - cron: "0 12 * * *"   # 19:00 Vietnam (UTC+7)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write           # to commit data/briefs.csv back to the repo
+
+concurrency:
+  group: daily-brief
+  cancel-in-progress: false
+
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pipeline
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+        run: python -m src.main
+
+      - name: Commit updated history
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain data/briefs.csv)" ]; then
+            git add data/briefs.csv
+            git commit -m "chore: daily brief $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          else
+            echo "No CSV changes to commit."
+          fi
