@@ -80,7 +80,7 @@ def _client() -> genai.Client:
     return genai.Client(api_key=config.GEMINI_API_KEY)
 
 
-def _generate(client: genai.Client, prompt: str, schema: types.Schema, retries: int = 3):
+def _generate(client: genai.Client, prompt: str, schema: types.Schema, retries: int = 5):
     """Call Gemini with a JSON schema, retrying on transient errors."""
     cfg = types.GenerateContentConfig(
         response_mime_type="application/json",
@@ -99,7 +99,9 @@ def _generate(client: genai.Client, prompt: str, schema: types.Schema, retries: 
         except Exception as err:  # noqa: BLE001 - retry any transient failure
             last_err = err
             if attempt < retries - 1:
-                time.sleep(2 ** attempt)
+                wait = min(30, 5 * (2 ** attempt))  # 5s, 10s, 20s, 30s
+                print(f"      Gemini attempt {attempt + 1} failed, retrying in {wait}s...")
+                time.sleep(wait)
     raise RuntimeError(f"Gemini call failed after {retries} attempts: {last_err}")
 
 
