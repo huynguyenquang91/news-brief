@@ -80,29 +80,39 @@ def _client() -> genai.Client:
     return genai.Client(api_key=config.GEMINI_API_KEY)
 
 
-def _generate(client: genai.Client, prompt: str, schema: types.Schema, retries: int = 5):
-    """Call Gemini with a JSON schema, retrying on transient errors."""
+def _generate(client: genai.Client, prompt: str, schema: types.Schema, retries: int = 3):
+    """Call Gemini with a JSON schema, retrying on transient errors.
+
+    Tries the primary model first; falls back to GEMINI_FALLBACK_MODEL on
+    persistent 503s before giving up.
+    """
     cfg = types.GenerateContentConfig(
         response_mime_type="application/json",
         response_schema=schema,
         temperature=0.3,
     )
-    last_err: Exception | None = None
-    for attempt in range(retries):
-        try:
-            resp = client.models.generate_content(
-                model=config.GEMINI_MODEL,
-                contents=prompt,
-                config=cfg,
-            )
-            return json.loads(resp.text)
-        except Exception as err:  # noqa: BLE001 - retry any transient failure
-            last_err = err
-            if attempt < retries - 1:
-                wait = min(30, 5 * (2 ** attempt))  # 5s, 10s, 20s, 30s
-                print(f"      Gemini attempt {attempt + 1} failed, retrying in {wait}s...")
-                time.sleep(wait)
-    raise RuntimeError(f"Gemini call failed after {retries} attempts: {last_err}")
+
+    for model in [config.GEMINI_MODEL, config.GEMINI_FALLBACK_MODEL]:
+        last_err: Exception | None = None
+        for attempt in range(retries):
+            try:
+                resp = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=cfg,
+                )
+                if model != config.GEMINI_MODEL:
+                    print(f"      (used fallback model: {model})")
+                return json.loads(resp.text)
+            except Exception as err:  # noqa: BLE001 - retry any transient failure
+                last_err = err
+                if attempt < retries - 1:
+                    wait = min(30, 5 * (2 ** attempt))  # 5s, 10s, 20s
+                    print(f"      Gemini {model} attempt {attempt + 1} failed, retrying in {wait}s...")
+                    time.sleep(wait)
+        print(f"      Gemini {model} failed after {retries} attempts, trying fallback...")
+
+    raise RuntimeError(f"Gemini call failed on all models: {last_err}")
 
 
 def _clamp(value: float) -> float:
