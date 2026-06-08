@@ -69,10 +69,13 @@ KEYWORD_TIERS: dict[int, list[str]] = {
         "ticket", "qualification", "AFC", "CONCACAF"],
 }
 
+# Article types that are dropped entirely (evergreen reference content, not news).
+DROP_ARTICLE_TYPES: list[str] = ["roundup", "feature"]
+
 # Weights for each dimension (must sum to 1.0).
-FILTER_WEIGHT_SOURCE  = 0.30
-FILTER_WEIGHT_TYPE    = 0.30
-FILTER_WEIGHT_KEYWORD = 0.40
+FILTER_WEIGHT_SOURCE  = 0.25
+FILTER_WEIGHT_TYPE    = 0.45
+FILTER_WEIGHT_KEYWORD = 0.30
 
 # Weight blending Gemini composite (0–10) vs filter priority (0–1).
 # combined_score = WEIGHT_GEMINI * (composite/10) + WEIGHT_FILTER * filter_priority

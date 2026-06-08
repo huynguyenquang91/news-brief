@@ -34,6 +34,14 @@ def run(skip_sheet: bool = False) -> int:
 
     # Keep only 2026 World Cup-relevant items, then renumber ranks.
     scored = [s for s in scored if s.composite >= config.RELEVANCE_MIN_COMPOSITE]
+    # Drop evergreen reference content (squad lists, schedule guides, etc.).
+    if config.DROP_ARTICLE_TYPES:
+        before = len(scored)
+        scored = [s for s in scored if s.article_type not in config.DROP_ARTICLE_TYPES]
+        dropped = before - len(scored)
+        if dropped:
+            print(f"      Dropped {dropped} evergreen articles "
+                  f"({', '.join(config.DROP_ARTICLE_TYPES)}).")
     for i, s in enumerate(scored, 1):
         s.rank = i
     print(f"      {len(scored)} relevant to the 2026 World Cup "
