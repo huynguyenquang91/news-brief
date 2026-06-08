@@ -72,6 +72,24 @@ KEYWORD_TIERS: dict[int, list[str]] = {
 # Article types that are dropped entirely (evergreen reference content, not news).
 DROP_ARTICLE_TYPES: list[str] = ["roundup", "feature"]
 
+# Title substring patterns (case-insensitive) that flag an article for removal
+# regardless of how Gemini classified it.
+BLOCK_TITLE_PATTERNS: list[str] = [
+    "squad list",
+    "squad lists",
+    "how to watch",
+    "everything you need to know",
+    "fixtures and schedule",
+    "schedule and fixtures",
+    "all you need to know",
+    "giải đấu lớn nhất lịch sử",   # "biggest tournament in history" evergreen
+]
+
+# Jaccard similarity threshold for within-run duplicate detection (0–1).
+# Articles whose titles share >= this fraction of words are considered duplicates;
+# only the higher-ranked one is kept.
+TITLE_DEDUP_THRESHOLD = 0.55
+
 # Weights for each dimension (must sum to 1.0).
 FILTER_WEIGHT_SOURCE  = 0.25
 FILTER_WEIGHT_TYPE    = 0.45

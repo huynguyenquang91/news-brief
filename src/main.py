@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from datetime import datetime, timezone
 
@@ -16,6 +17,29 @@ def _run_slot(now_utc: datetime) -> str:
     """Label the run am/pm based on Vietnam local time (UTC+7)."""
     vn_hour = (now_utc.hour + 7) % 24
     return "am" if vn_hour < 12 else "pm"
+
+
+def _blocked_by_title(title: str) -> bool:
+    t = title.lower()
+    return any(p.lower() in t for p in config.BLOCK_TITLE_PATTERNS)
+
+
+def _jaccard(t1: str, t2: str) -> float:
+    w1 = set(re.sub(r"\W+", " ", t1.lower()).split())
+    w2 = set(re.sub(r"\W+", " ", t2.lower()).split())
+    if not w1 or not w2:
+        return 0.0
+    return len(w1 & w2) / len(w1 | w2)
+
+
+def _dedup_titles(scored):
+    """Drop lower-ranked article when two titles are near-identical."""
+    kept = []
+    for s in scored:
+        if not any(_jaccard(s.article.title, k.article.title) >= config.TITLE_DEDUP_THRESHOLD
+                   for k in kept):
+            kept.append(s)
+    return kept
 
 
 def run(skip_sheet: bool = False) -> int:
@@ -32,20 +56,32 @@ def run(skip_sheet: bool = False) -> int:
     scored = score_articles(articles)
     print(f"      Scored {len(scored)} articles.")
 
-    # Keep only 2026 World Cup-relevant items, then renumber ranks.
+    # Keep only 2026 World Cup-relevant items.
     scored = [s for s in scored if s.composite >= config.RELEVANCE_MIN_COMPOSITE]
-    # Drop evergreen reference content (squad lists, schedule guides, etc.).
+
+    # Drop evergreen reference content by article type.
     if config.DROP_ARTICLE_TYPES:
         before = len(scored)
         scored = [s for s in scored if s.article_type not in config.DROP_ARTICLE_TYPES]
-        dropped = before - len(scored)
-        if dropped:
-            print(f"      Dropped {dropped} evergreen articles "
-                  f"({', '.join(config.DROP_ARTICLE_TYPES)}).")
+        if (dropped := before - len(scored)):
+            print(f"      Dropped {dropped} by type ({', '.join(config.DROP_ARTICLE_TYPES)}).")
+
+    # Drop articles whose titles match known evergreen patterns.
+    if config.BLOCK_TITLE_PATTERNS:
+        before = len(scored)
+        scored = [s for s in scored if not _blocked_by_title(s.article.title)]
+        if (dropped := before - len(scored)):
+            print(f"      Dropped {dropped} by title pattern.")
+
+    # Drop near-duplicate stories (same event, different outlets).
+    before = len(scored)
+    scored = _dedup_titles(scored)
+    if (dropped := before - len(scored)):
+        print(f"      Dropped {dropped} near-duplicate titles.")
+
     for i, s in enumerate(scored, 1):
         s.rank = i
-    print(f"      {len(scored)} relevant to the 2026 World Cup "
-          f"(composite >= {config.RELEVANCE_MIN_COMPOSITE}).")
+    print(f"      {len(scored)} articles remaining after all filters.")
     if not scored:
         print("      No World Cup-relevant news this run. Exiting cleanly.")
         return 0
